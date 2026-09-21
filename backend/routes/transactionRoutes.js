@@ -18,21 +18,22 @@ const { validate } = require('../middleware/validateMiddleware');
 
 const router = express.Router();
 
-// Ensure upload directory exists
-const uploadDir = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+// Use memory storage on Vercel (read-only filesystem), disk storage locally
+const isVercel = process.env.VERCEL || process.env.NODE_ENV === 'production';
 
-// Multer setup for CSV uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, `transactions-${Date.now()}${path.extname(file.originalname)}`);
-  }
-});
+const storage = isVercel
+  ? multer.memoryStorage()
+  : (() => {
+      const uploadDir = path.join(__dirname, '../uploads');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      return multer.diskStorage({
+        destination: (req, file, cb) => cb(null, uploadDir),
+        filename: (req, file, cb) =>
+          cb(null, `transactions-${Date.now()}${path.extname(file.originalname)}`)
+      });
+    })();
 
 const upload = multer({
   storage,

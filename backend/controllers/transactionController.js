@@ -1,5 +1,6 @@
 const Transaction = require('../models/Transaction');
 const fs = require('fs');
+const { Readable } = require('stream');
 const csvParser = require('csv-parser');
 
 // @desc    Create new transaction (income or expense)
@@ -316,9 +317,13 @@ const importCSV = async (req, res, next) => {
     }
 
     const results = [];
-    const filePath = req.file.path;
 
-    fs.createReadStream(filePath)
+    // Support both memory storage (Vercel) and disk storage (local dev)
+    const fileStream = req.file.buffer
+      ? Readable.from(req.file.buffer)
+      : fs.createReadStream(req.file.path);
+
+    fileStream
       .pipe(csvParser())
       .on('data', (data) => {
         // Look for Type, Amount, Category, Date, etc. (case insensitive)
@@ -351,9 +356,9 @@ const importCSV = async (req, res, next) => {
         }
       })
       .on('end', async () => {
-        // Clean up temporary file
+        // Clean up temp file (disk storage only)
         try {
-          fs.unlinkSync(filePath);
+          if (req.file.path) fs.unlinkSync(req.file.path);
         } catch (e) {
           // ignore unlink error
         }
@@ -375,7 +380,7 @@ const importCSV = async (req, res, next) => {
       })
       .on('error', (err) => {
         try {
-          fs.unlinkSync(filePath);
+          if (req.file.path) fs.unlinkSync(req.file.path);
         } catch (e) {}
         next(err);
       });
